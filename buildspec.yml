@@ -1,0 +1,55 @@
+version: 0.2
+run as: root
+
+env:
+  variables:
+    ECR_REGION: us-east-1
+    CONTAINER_NAME: lks-exam-container
+    IMAGE_REPO: exam
+    NODE_ENV: production
+    PORT: 9000
+    DB_TYPE: mongodb_aws
+    MONGO_DB: lks-docdb
+    MONGO_USERNAME: raka
+    MONGO_PASSWORD: rakaanggie
+    MONGO_HOST: lks-docdb.cluster-clqqyhrtzbj3.us-east-1.docdb.amazonaws.com
+    MONGO_PORT: 27017
+    MONGO_CERT: rds-combined-ca-bundle.pem
+    LOG_PATH: /var/log
+    CACHE_PATH: /var/tmp
+phases:
+  install:
+    runtime-versions:
+      docker: 20
+  pre_build:
+    commands:
+      - echo "create environment file and login into ECR"
+      - aws ecr get-login-password --region $ECR_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$ECR_REGION.amazonaws.com
+      - ECR_REPO=$AWS_ACCOUNT_ID.dkr.ecr.$ECR_REGION.amazonaws.com/$IMAGE_REPO
+      - echo NODE_ENV=${NODE_ENV} >> .env 
+      - echo PORT=${PORT} >> .env 
+      - echo DB_TYPE=${DB_TYPE} >> .env 
+      - echo MONGO_DB=${MONGO_DB} >> .env 
+      - echo MONGO_USERNAME=${MONGO_USERNAME} >> .env 
+      - echo MONGO_PASSWORD=${MONGO_PASSWORD} >> .env 
+      - echo MONGO_HOST=${MONGO_HOST} >> .env 
+      - echo MONGO_PORT=${MONGO_PORT} >> .env 
+      - echo MONGO_CERT=${MONGO_CERT} >> .env 
+      - echo LOG_PATH=${LOG_PATH} >> .env 
+      - echo CACHE_PATH=${CACHE_PATH} >> .env 
+  build:
+    commands:
+      - echo "build docker image"
+      - docker build -t $IMAGE_REPO:$IMAGE_TAG -f Dockerfile .
+      - docker tag $IMAGE_REPO:$IMAGE_TAG $AWS_ACCOUNT_ID.dkr.ecr.$ECR_REGION.amazonaws.com/$IMAGE_REPO:$IMAGE_TAG
+  post_build:
+    commands:
+      - echo "push image and create artifacts"
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$ECR_REGION.amazonaws.com/$IMAGE_REPO:$IMAGE_TAG
+      - printf '[{"name":"%s","imageUri":"%s"}]' $CONTAINER_NAME $ECR_REPO:$IMAGE_TAG > imagedefinitions.json
+      - printf '{"AWSEBDockerrunVersion":"1","Image":{"Name":"405040917563.dkr.ecr.us-east-1.amazonaws.com/exam:latest","Update":"true"},"Ports":[{"ContainerPort":8000,"HostPort":80}]}' > Dockerrun.aws.json
+
+artifacts:
+  files:
+    - imagedefinitions.json
+    - Dockerrun.aws.json
